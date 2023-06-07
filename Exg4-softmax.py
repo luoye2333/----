@@ -16,7 +16,7 @@ print(softmax_x)
 # x-=np.max(x)#防止溢出
 # softmax_x=np.exp(x) / np.sum(np.exp(x), axis=0)
 # print(softmax_x)
-
+x=x*2
 x-=np.max(x)#防止溢出
 softmax_x=np.exp(x) / np.sum(np.exp(x))
 print(softmax_x)

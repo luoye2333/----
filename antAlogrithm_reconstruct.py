@@ -25,8 +25,10 @@ class antAlogorithm:
         
         self.InitializePathGraph()
         self.historyBestAntSeries=np.ndarray([antCount],dtype=ant)
-        self.lastBestList=[]
-
+        self.historyBestAnt=None
+        self.lastBestList=[]#根据过去几次迭代的解是否一样判断结束条件
+        self.globalEndCount=0#收敛后重置次数
+        self.globalEndBest=None#记录每次重新收敛后，收敛到最后的值
 
     def InitializePathGraph(self,
                             xRange=10,
@@ -133,10 +135,11 @@ class antAlogorithm:
             pathStart=path[pathIndex-1]
             minPathLength=np.inf
             next=0
+            #选择下一个城市，路径最短
             for pathEnd in range(self.cityCount):
                 if visited[pathEnd]:continue
                 if self.Distance[pathStart][pathEnd]<minPathLength:
-                    allLength=self.Distance[pathStart][pathEnd]
+                    minPathLength=self.Distance[pathStart][pathEnd]
                     next=pathEnd
             path[pathIndex]=next
             visited[next]=True
@@ -148,6 +151,7 @@ class antAlogorithm:
     def resetProblem(self):
         self.InfoDensity=np.ones([self.cityCount,self.cityCount])*self.InfoDensityInitial 
         self.iterationCount=0
+        self.lastBestList=[]
 
     def iterate(self):
         #每轮迭代需要生成所有蚂蚁的路径，然后更新信息素
@@ -171,123 +175,167 @@ class antAlogorithm:
         return self.isEndSituation()
 
     def updateInfoDensity(self):
-       
-        #朴素策略O(n^2)
-        #每条蚂蚁走过的整条路径 根据路径长度的倒数 增加信息素
-        # rhoEvaporate=0.5
-        # self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
-        # rhoTraverse=1#倍率
-        # for antIndex in range(self.antCount):
-        #     for city in range(self.cityCount-1):
-        #         ant=self.antSeries[antIndex]
-        #         pathStart=ant.citySeries[city]
-        #         pathEnd=ant.citySeries[city+1]
-        #         self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*1.0/ant.pathLength
-        #         self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*1.0/ant.pathLength#邻接矩阵正反两条路都要更新
+        judgeMethod=4
 
-        #策略2：根据路径长度排序，只对前10%短的路径更新信息素（计算时间减少，收敛速度加快）
-        # rhoEvaporate=0.5
-        # self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
-        # rhoTraverse=1#倍率
-        # for antIndex in range(int(self.antCount*0.1)):
-        #     for city in range(self.cityCount-1):
-        #         ant=self.antSeries[antIndex]
-        #         pathStart=ant.citySeries[city]
-        #         pathEnd=ant.citySeries[city+1]
-        #         self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*1.0/ant.pathLength
-        #         self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*1.0/ant.pathLength#邻接矩阵正反两条路都要更新
-
-        #策略3：对路径使用softmax归一化映射，放大路径差距（不容易收敛）
-        # rhoEvaporate=0.5
-        # self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
-        # sorted_path=[ant.pathLength for ant in self.antSeries]
-        # sorted_path-=np.max(sorted_path)#防止溢出
-        # softmax_sum=np.sum(np.exp(1.0/sorted_path[0:int(self.antCount*0.1)]))
-        # rhoTraverse=1#倍率
-        # for antIndex in range(int(self.antCount*0.1)):
-        #     for city in range(self.cityCount-1):
-        #         ant=self.antSeries[antIndex]
-        #         pathStart=ant.citySeries[city]
-        #         pathEnd=ant.citySeries[city+1]
-        #         #邻接矩阵正反两条路都要更新
-        #         self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
-        #         self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
-
-        #策略4，记忆历史最短路径，RAS(rank ant system)
-        # rhoEvaporate=0.5
-        # self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
-        # if self.iterationCount>1:
-        #     #和历史序列合并
-        #     self.antSeries=np.concatenate((self.antSeries,self.historyBestAntSeries))
-
-        # sorted_path=[ant.pathLength for ant in self.antSeries]
-        # sorted_path-=np.max(sorted_path)#防止溢出
-        # softmax_sum=np.sum(np.exp(1.0/sorted_path[0:int(self.antCount*0.1)]))
-        # rhoTraverse=5#倍率
-        # for antIndex in range(int(self.antCount*0.1)):
-        #     for city in range(self.cityCount-1):
-        #         ant=self.antSeries[antIndex]
-        #         pathStart=ant.citySeries[city]
-        #         pathEnd=ant.citySeries[city+1]
-        #         #邻接矩阵正反两条路都要更新
-        #         self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
-        #         self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
+        if judgeMethod==1:
+            #朴素策略O(n^2)
+            #每条蚂蚁走过的整条路径 根据路径长度的倒数 增加信息素
+            rhoEvaporate=0.5
+            self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
+            rhoTraverse=1#倍率
+            for antIndex in range(self.antCount):
+                for city in range(self.cityCount-1):
+                    ant=self.antSeries[antIndex]
+                    pathStart=ant.citySeries[city]
+                    pathEnd=ant.citySeries[city+1]
+                    self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*1.0/ant.pathLength
+                    self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*1.0/ant.pathLength#邻接矩阵正反两条路都要更新
         
-        # #保存历史前3%短路径
-        # self.historyBestAntSeries=self.antSeries[0:int(self.antCount*0.03)]
+        if judgeMethod==2:
+            #策略2：根据路径长度排序，只对前10%短的路径更新信息素（计算时间减少，收敛速度加快）
+            rhoEvaporate=0.5
+            self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
+            rhoTraverse=1#倍率
+            for antIndex in range(int(self.antCount*0.1)):
+                for city in range(self.cityCount-1):
+                    ant=self.antSeries[antIndex]
+                    pathStart=ant.citySeries[city]
+                    pathEnd=ant.citySeries[city+1]
+                    self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*1.0/ant.pathLength
+                    self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*1.0/ant.pathLength#邻接矩阵正反两条路都要更新
+        
+        if judgeMethod==3:
+            #策略3：对路径使用softmax归一化映射，放大路径差距（不容易收敛）
+            rhoEvaporate=0.5
+            self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
+            sorted_path=[ant.pathLength for ant in self.antSeries]
+            sorted_path-=np.max(sorted_path)#防止溢出
+            softmax_sum=np.sum(np.exp(1.0/sorted_path[0:int(self.antCount*0.1)]))
+            rhoTraverse=1#倍率
+            for antIndex in range(int(self.antCount*0.1)):
+                for city in range(self.cityCount-1):
+                    ant=self.antSeries[antIndex]
+                    pathStart=ant.citySeries[city]
+                    pathEnd=ant.citySeries[city+1]
+                    #邻接矩阵正反两条路都要更新
+                    self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
+                    self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
 
-        #策略5，只保留一条最优路径，EAS(elite ant system)
-        rhoEvaporate=0.1
-        self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
-        if self.iterationCount>=1:
-            #和历史序列合并
-            self.antSeries=np.concatenate((self.antSeries,self.historyBestAntSeries))
-        #TODO 逻辑可能有问题，不应该把历史最优放进当前批次产生的蚂蚁中
+        if judgeMethod==4:
+            #策略4，记忆历史最短路径，RAS(rank ant system)
+            rhoEvaporate=0.5
+            self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
+            if (self.iterationCount>=1)or(self.globalEndCount>0):
+                #和历史序列合并
+                concat_Series=np.concatenate((self.antSeries,self.historyBestAntSeries))
+                sorted_indices = np.argsort([ant.pathLength for ant in concat_Series])
+                sorted_antSeries = concat_Series[sorted_indices]
+            else:
+                sorted_antSeries=self.antSeries
 
-        sorted_path=[ant.pathLength for ant in self.antSeries]
-        sorted_path-=np.max(sorted_path)#防止溢出
-        softmax_sum=np.sum(np.exp(1.0/sorted_path[0:int(self.antCount*0.1)]))
-        rhoTraverse=3#倍率
-        for antIndex in range(int(self.antCount*0.1)):
-            for city in range(self.cityCount-1):
-                ant=self.antSeries[antIndex]
-                pathStart=ant.citySeries[city]
-                pathEnd=ant.citySeries[city+1]
-                #邻接矩阵正反两条路都要更新
-                self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
-                self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
-        #保存历史最优
-        self.historyBestAntSeries=self.antSeries[0:1]
+            sorted_path=[ant.pathLength for ant in sorted_antSeries]
+            sorted_path-=np.max(sorted_path)#防止溢出
+            softmax_sum=np.sum(np.exp(1.0/sorted_path[0:int(self.antCount*0.1)]))
+            rhoTraverse=5#倍率
+            for antIndex in range(int(self.antCount*0.1)):
+                for city in range(self.cityCount-1):
+                    ant=sorted_antSeries[antIndex]
+                    pathStart=ant.citySeries[city]
+                    pathEnd=ant.citySeries[city+1]
+                    #邻接矩阵正反两条路都要更新
+                    self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
+                    self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp(1.0/ant.pathLength)/softmax_sum
+            
+            #保存历史前3%短路径
+            self.historyBestAntSeries=sorted_antSeries[0:int(self.antCount*0.03)]
+            self.historyBestAnt=sorted_antSeries[0]
+
+        if judgeMethod==5:
+            #策略5，只保留一条最优路径，EAS(elite ant system)
+            rhoEvaporate=0.1
+            self.InfoDensity=np.multiply(self.InfoDensity,rhoEvaporate)
+            if (self.iterationCount>=1)or(self.globalEndCount>0):
+                #和历史序列合并
+                concat_Series=np.concatenate((self.antSeries,[self.historyBestAnt]))
+                sorted_indices = np.argsort([ant.pathLength for ant in concat_Series])
+                sorted_antSeries = concat_Series[sorted_indices]
+            else:
+                sorted_antSeries=self.antSeries
+            
+            #更新新生成的蚂蚁的信息素
+            updateLimit=10
+            sorted_path=[ant.pathLength for ant in sorted_antSeries[0:updateLimit]]
+            invert_sorted_path=1.0/np.array(sorted_path)
+            min_val = np.min(invert_sorted_path)
+            max_val = np.max(invert_sorted_path)
+            if (max_val==min_val):
+                #防止除0报错
+                self.historyBestAnt=sorted_antSeries[0]
+                return
+            path_scaled = (invert_sorted_path - min_val) / (max_val - min_val)#归一化
+            softmax_scaler=0.5#影响不同路径概率分布，>1差距变大，<1差距变小
+            path_scaled=path_scaled*softmax_scaler
+            
+            softmax_sum=np.sum(np.exp(path_scaled))
+            rhoTraverse=1#倍率
+            for antIndex in range(int(updateLimit)):
+                for city in range(self.cityCount-1):
+                    ant=sorted_antSeries[antIndex]
+                    pathStart=ant.citySeries[city]
+                    pathEnd=ant.citySeries[city+1]
+                    #邻接矩阵正反两条路都要更新
+                    if antIndex==0:
+                        rhoTraverse=1#最优蚂蚁倍率
+                    self.InfoDensity[pathStart][pathEnd]+=rhoTraverse*np.exp((1.0/ant.pathLength-min_val)/(max_val - min_val))/softmax_sum
+                    self.InfoDensity[pathEnd][pathStart]+=rhoTraverse*np.exp((1.0/ant.pathLength-min_val)/(max_val - min_val))/softmax_sum
+            
+            #保存历史最优
+            if self.historyBestAnt is None:
+                self.historyBestAnt=sorted_antSeries[0]
+            else:
+                if sorted_antSeries[0].pathLength<self.historyBestAnt.pathLength:
+                    self.historyBestAnt=sorted_antSeries[0]
 
     def outputSolution(self,text=False):
         #输出当前情况下找到的最优解
 
         minPath=np.inf
         minPathIndex=-1
-        for i in range(len(self.historyBestAntSeries)):
-            d=self.historyBestAntSeries[i].pathLength
+        for i in range(len(self.antSeries)):
+            d=self.antSeries[i].pathLength
             if (d<minPath):
                 minPathIndex=i
                 minPath = d
-        print("iteration:{},length:{:2f}".format(self.iterationCount,minPath))
+        print("global:{},iteration:{},length:{:2f},historyBest:{:2f}".format(
+            self.globalEndCount,
+            self.iterationCount,
+            minPath,
+            self.historyBestAnt.pathLength))
         
-        if text:
-            antMinPath=self.historyBestAntSeries[minPathIndex]
-            for city in range(self.cityCount-1):
-                pathStart=antMinPath.citySeries[minPathIndex][city]
-                pathEnd=antMinPath.citySeries[minPathIndex][city+1]
-                print("{0}->{1} : {2:2f}".format(pathStart,
-                                                 pathEnd,
-                                                 self.Distance[pathStart][pathEnd]))
+        # 文本输出路径，城市数量多时不适用
+        # if text:
+        #     antMinPath=self.historyBestAntSeries[minPathIndex]
+        #     for city in range(self.cityCount-1):
+        #         pathStart=antMinPath.citySeries[minPathIndex][city]
+        #         pathEnd=antMinPath.citySeries[minPathIndex][city+1]
+        #         print("{0}->{1} : {2:2f}".format(pathStart,
+        #                                          pathEnd,
+        #                                          self.Distance[pathStart][pathEnd]))
 
         if self.plot:
             self.ax1.clear()
             self.ax1.scatter(self.cityXpos, self.cityYpos, color="blue")# 绘制城市/点
-            
-            antMinPath=self.historyBestAntSeries[minPathIndex]
+            #historyBest
+            antMinPath=self.historyBestAnt
             x=self.cityXpos[antMinPath.citySeries]
             y=self.cityYpos[antMinPath.citySeries]
             self.ax1.plot(x,y, color="red", linewidth=2)
+            #currentBest
+            antMinPath=self.antSeries[0]
+            x=self.cityXpos[antMinPath.citySeries]
+            y=self.cityYpos[antMinPath.citySeries]
+            self.ax1.plot(x,y, color="green", linewidth=2)
+
 
         # for city in range(self.cityCount-1):
         #     pathStart=citySeries[minPathIndex][city]
@@ -300,7 +348,7 @@ class antAlogorithm:
 
         #输出信息素浓度
         infoOutput=True
-        if infoOutput:
+        if (self.plot and infoOutput):
             maxInfoDensity=np.max(self.InfoDensity)
             self.ax2.clear()
             self.ax2.scatter(self.cityXpos, self.cityYpos, color="blue")# 绘制城市/点
@@ -317,31 +365,67 @@ class antAlogorithm:
         plt.pause(0.01)
 
     def isEndSituation(self):
+
         #策略1：如果最优路径很久没有变化则结束
-        currentBest=self.historyBestAntSeries[0].pathLength
+        case1=False
+        currentBest=self.antSeries[0].pathLength
         tolerance=1e-5
-        longTimeCount=10
+        longTimeCount=5
         if len(self.lastBestList)==0:
             self.lastBestList.append(currentBest)
         else:
             lastBest=self.lastBestList[-1]
-            if (currentBest-lastBest<tolerance):
+            if (np.abs(currentBest-lastBest)<tolerance):
                 self.lastBestList.append(currentBest)
                 if(len(self.lastBestList)>=longTimeCount):
-                    return True
+                    case1=True
             else:#最优解有变化，则重新记录
                 self.lastBestList=[currentBest]
+    
+        #策略2：如果很多路径都和最优路径一样，那么结束
+        case2=True
+        currentBest=self.antSeries[0].pathLength
+        tolerance=1e-5
+        longCount=10
+        for i in range(longCount):
+            if np.abs(self.antSeries[i].pathLength-currentBest) > tolerance:
+                case2=False
+                break
+        
+        #必须收敛到和历史最优一样
+        caseX= np.abs(self.antSeries[0].pathLength-self.historyBestAnt.pathLength) < tolerance
+        
+        endcase=(case1 or case2) and caseX
+        if not endcase:
+            return False
+        else:
+            #当满足结束条件，考虑是否要重新收敛
+            currentBest=self.antSeries[0].pathLength
+            tolerance=1e-5
+            if self.globalEndBest==None:
+                #第一次收敛
+                self.globalEndBest=currentBest
+                self.globalEndCount+=1
+            else:
+                #判断是否和上次收敛的结果一样
+                lastBest=self.globalEndBest
+                if np.abs(currentBest-lastBest)<tolerance:
+                    self.globalEndCount+=1
+                else:
+                    #不一样，重置队列
+                    self.globalEndBest=currentBest
+                    self.globalEndCount=1
             
-        #策略2：如果找到的路径和最优路径一样，那么结束
-        sorted_path=[ant.pathLength for ant in self.antSeries]
-        longTimeCount=10
-        for i in range(longTimeCount):
-            123#TODO
+            #重置信息素，保留最优路径，重新收敛
+            if self.globalEndCount<3:
+                self.resetProblem()
+                print("reset InfoDensity")
+                return False
+            else:
+                print("complete")
+                return True
 
-        #策略3：当满足一次结束条件以后，重置信息素，但保留最优路径，重新计算
-        #TODO
 
-        return False
     
 class ant:
     def __init__(self,
@@ -425,11 +509,13 @@ class ant:
 
 
 if __name__=='__main__':
-    n=antAlogorithm(antCount=100,cityCount=20,plot=True)
-    # n=antAlogorithm(antCount=300,cityCount=50,plot=True)
-    # n=antAlogorithm(antCount=500,cityCount=100,plot=True)
+    isplot=False
+    # n=antAlogorithm(antCount=100,cityCount=20,plot=isplot)
+    # n=antAlogorithm(antCount=200,cityCount=35,plot=isplot)
+    # n=antAlogorithm(antCount=300,cityCount=50,plot=isplot)
+    n=antAlogorithm(antCount=500,cityCount=100,plot=isplot)
 
-    for i in range(100):
+    while True:
         exitStatus=n.iterate()
         if exitStatus:break
 
