@@ -20,11 +20,13 @@ class antAlogorithm:
         self.cityYpos=None
         self.Distance=None#路径邻接矩阵，对称
         self.InfoDensity=None#路径信息素浓度矩阵，对称
-        self.antSeries=np.ndarray([antCount],dtype=ant)
+        # self.antSeries=np.ndarray([antCount],dtype=ant)
+        self.antSeries=[(ant()) for i in range(antCount)]
         self.iterationCount=0
         
         self.InitializePathGraph()
-        self.historyBestAntSeries=np.ndarray([antCount],dtype=ant)
+        # self.historyBestAntSeries=np.ndarray([antCount],dtype=ant)
+        self.historyBestAntSeries=[(ant()) for i in range(antCount)]
         self.historyBestAnt=None
         self.lastBestList=[]#根据过去几次迭代的解是否一样判断结束条件
         self.globalEndCount=0#收敛后重置次数
@@ -155,7 +157,8 @@ class antAlogorithm:
 
     def iterate(self):
         #每轮迭代需要生成所有蚂蚁的路径，然后更新信息素
-        self.antSeries=np.ndarray([self.antCount],dtype=ant)
+        # self.antSeries=np.ndarray([antCount],dtype=ant)
+        self.antSeries=[(ant()) for i in range(self.antCount)]
         
         for antIndex in range(self.antCount):
             #模拟每个蚂蚁的路径
@@ -166,7 +169,8 @@ class antAlogorithm:
 
         #对生成的所有蚂蚁按照路径长度排序，方便后续处理
         sorted_indices = np.argsort([ant.pathLength for ant in self.antSeries])
-        sorted_antSeries = self.antSeries[sorted_indices]
+        # sorted_antSeries = [self.antSeries[i] for i in sorted_indices]
+        sorted_antSeries=np.array(self.antSeries)[sorted_indices]
         self.antSeries=sorted_antSeries
 
         self.updateInfoDensity()
@@ -429,7 +433,7 @@ class antAlogorithm:
     
 class ant:
     def __init__(self,
-                 cityCount):
+                 cityCount=0):
         self.cityCount=cityCount
         self.visited=np.zeros([self.cityCount],dtype=bool)
         self.citySeries=np.zeros([self.cityCount],dtype=int)
@@ -509,11 +513,11 @@ class ant:
 
 
 if __name__=='__main__':
-    isplot=False
+    isplot=True
     # n=antAlogorithm(antCount=100,cityCount=20,plot=isplot)
-    # n=antAlogorithm(antCount=200,cityCount=35,plot=isplot)
+    n=antAlogorithm(antCount=200,cityCount=35,plot=isplot)
     # n=antAlogorithm(antCount=300,cityCount=50,plot=isplot)
-    n=antAlogorithm(antCount=500,cityCount=100,plot=isplot)
+    # n=antAlogorithm(antCount=500,cityCount=100,plot=isplot)
 
     while True:
         exitStatus=n.iterate()
