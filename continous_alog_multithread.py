@@ -41,8 +41,8 @@ class ant:
 
         sense_radius=15#信息素搜集半径
         #备选方向
-        left_angle=60
-        right_angle=-60
+        left_angle=30
+        right_angle=-30
         random_angle=30#角度随机范围:+r~-r
 
         left_info_density=0
@@ -86,7 +86,7 @@ class ant:
         self.facing_angle=next_facing_angle
 
     def walk(self):
-        step_length=3
+        step_length=1
 
         #前进一步
         x=self.current_pos_x
@@ -113,7 +113,7 @@ class ant:
         tx=self.target[0]
         ty=self.target[1]
 
-        threshold=10
+        threshold=25
         dist=math.sqrt((x-tx)**2+(y-ty)**2)
         if (dist<threshold):return True
         else:return False
@@ -196,8 +196,7 @@ class ant:
             p1=self.path[i]
             p2=self.path[i+1]
             pathLength+=math.sqrt(np.sum((p1-p2)**2))
-        #TODO 信息素强度应该和全局\历史最优路径有关
-        # 现在区分度太小，找到路径后优化过慢
+
         arrivalIntensity=1/pathLength*10000
         for point in self.path:
             self.updateInfoDensity(InfoDensityMap,
@@ -214,7 +213,7 @@ InfoDensityMap=np.ones((int(map_size_x/accuracy),
                         int(map_size_y/accuracy)))*initial_infoDensity
 
 # terrainMap=cv2.imread('map1.png',cv2.IMREAD_GRAYSCALE)
-terrainMap=cv2.imread('map2.png')
+terrainMap=cv2.imread('map1.png')
 terrainMap=np.flipud(terrainMap)#图像是上到下，坐标系是下到上，所以要颠倒一下
 
 ObstacleMap=cv2.cvtColor(terrainMap, cv2.COLOR_RGB2GRAY)
@@ -231,55 +230,65 @@ plt.pause(0.01)
 ant_series=[ant(obstacle_map=ObstacleMap,map_size=map_size)]
 
 
-def figure_update(output_count):
+
+def iterate():
     global InfoDensityMap
-    iteration_count=output_count
-    # print("iter:"+str(iteration_count))
-    #每次增加一只蚂蚁
-    # print(len(ant_series))
-    if len(ant_series)<100:
-        angle=random.random()*360
-        ant_series.append(ant(start_angle=angle,
-                            obstacle_map=ObstacleMap,
-                            map_size=map_size))
-
-    #对所有蚂蚁推进时间
-    for i in range(len(ant_series)):
-        m_ant=ant_series[i]
-        m_ant.judgeDirection(InfoDensityMap)
-        m_ant.walk()
-        if m_ant.isEnd():
-            #走到终点了，就重新生成一个替换
-            m_ant.updatePathInfoDensity(InfoDensityMap)
+    iteration_count=0
+    while True:
+        time.sleep(0.03)
+        iteration_count+=1
+        # print("iter:"+str(iteration_count))
+        #每次增加一只蚂蚁
+        # print(len(ant_series))
+        if len(ant_series)<100:
             angle=random.random()*360
-            ant_series[i]=ant(start_angle=angle,
-                            obstacle_map=ObstacleMap,
-                            map_size=map_size)
-            
-    #没找到终点时的信息素更新
-    # for m_ant in ant_series:
-    #     m_ant.updateInfoDensity(InfoDensityMap,
-    #                             m_ant.current_pos_x,
-    #                             m_ant.current_pos_y)
+            ant_series.append(ant(start_angle=angle,
+                                obstacle_map=ObstacleMap,
+                                map_size=map_size))
 
-    #自然蒸发率
-    rhoEvaporate=0.9
-    InfoDensityMap=np.multiply(InfoDensityMap,rhoEvaporate)
+        #对所有蚂蚁推进时间
+        for i in range(len(ant_series)):
+            m_ant=ant_series[i]
+            m_ant.judgeDirection(InfoDensityMap)
+            m_ant.walk()
+            if m_ant.isEnd():
+                #走到终点了，就重新生成一个替换
+                m_ant.updatePathInfoDensity(InfoDensityMap)
+                angle=random.random()*360
+                ant_series[i]=ant(start_angle=angle,
+                                obstacle_map=ObstacleMap,
+                                map_size=map_size)
+                
+        #没找到终点时的信息素更新
+        # for m_ant in ant_series:
+        #     m_ant.updateInfoDensity(InfoDensityMap,
+        #                             m_ant.current_pos_x,
+        #                             m_ant.current_pos_y)
+
+        #自然蒸发率
+        rhoEvaporate=0.9
+        InfoDensityMap=np.multiply(InfoDensityMap,rhoEvaporate)
+
+def figure_update(output_count):
+    start_time = time.time() 
+    # print("plot:"+str(output_count))
 
     #复制地形
     imageArray=np.copy(terrainMap)
+
+    #绘制蚂蚁
+    for i in range(len(ant_series)):
+        m_ant=ant_series[i]
+        x=m_ant.current_pos_x
+        y=m_ant.current_pos_y
+        imageArray[round(y)][round(x)]=(255,0,0)
 
     #绘制信息素浓度
     map_all_x=[]
     map_all_y=[]
     max_info_density=np.max(InfoDensityMap)
     if max_info_density==0:
-        #绘制蚂蚁
-        for i in range(len(ant_series)):
-            m_ant=ant_series[i]
-            x=m_ant.current_pos_x
-            y=m_ant.current_pos_y
-            imageArray[round(y)][round(x)]=(255,0,0)
+        # plt.pause(0.01)
         im.set_array(imageArray)
         # end_time = time.time()
         # elapsed_time = end_time - start_time
@@ -288,53 +297,41 @@ def figure_update(output_count):
 
     for i in range(map_size_x):
         for j in range(map_size_y):
-            if InfoDensityMap[i][j]/max_info_density<0.01:continue
+            if InfoDensityMap[i][j]/max_info_density<0.05:continue
             map_all_x.append(i)
             map_all_y.append(j)
 
     #归一化
-    color_info_density=InfoDensityMap[map_all_x, map_all_y]/100
-    # max_color=np.max(color_info_density)
-    # min_color=np.min(color_info_density)
-    # color_info_density=(color_info_density-min_color)/(max_color-min_color)
+    color_info_density=InfoDensityMap[map_all_x, map_all_y]
+    max_color=np.max(color_info_density)
+    min_color=np.min(color_info_density)
+    color_info_density=(color_info_density-min_color)/(max_color-min_color)
 
     color_map = np.zeros((len(map_all_x), 4))  # 创建颜色数组
-    color_map[:, 2] = 255  # 将全部的蓝色通道设为255
-    color_map[:, 3] = color_info_density*255  # 将不透明度设为信息素浓度
+    color_map[:, 2] = 1  # 将全部的蓝色通道设为1（蓝色）
+    color_map[:, 3] = color_info_density  # 将不透明度设为信息素浓度
 
     imageArray=cv2.cvtColor(imageArray, cv2.COLOR_RGB2RGBA)
     
-    marker_radius=1
     for i in range(len(map_all_x)):
         cv2.circle(imageArray,
                    (map_all_x[i],map_all_y[i]),
-                   radius=marker_radius,
-                   color=tuple(color_map[i]),
-                   thickness=-1,
-                   )
-        # lineType=cv2.LINE_AA
-
-        # point_x=map_all_x[i]
-        # point_y=map_all_y[i]
-        # for ix in range(math.ceil(point_x-marker_radius),math.floor(point_x+marker_radius)):
-        #     for iy in range(math.ceil(point_y-marker_radius),math.floor(point_y+marker_radius)):
-        #         #排除超出地图边界的点
-        #         if (ix<0)or(iy<0)or(ix>=map_size_x)or(iy>=map_size_y):continue
-        #         r=math.sqrt((ix-point_x)**2+(iy-point_y)**2)
-        #         if r>marker_radius:continue
-        #         imageArray[round(point_y)][round(point_x)]=tuple(color_map[i])
-        
-    #绘制蚂蚁
-    for i in range(len(ant_series)):
-        m_ant=ant_series[i]
-        x=m_ant.current_pos_x
-        y=m_ant.current_pos_y
-        imageArray[round(y)][round(x)]=(255,0,0,255)
-
+                   radius=1,
+                   color=color_map[i],
+                   thickness=-1)
     im.set_array(imageArray)
+    
+    # end_time = time.time()
+    # elapsed_time = end_time - start_time
+    # print('代码执行时间为 %f 秒' % elapsed_time)
     return im
 
-ani = FuncAnimation(fig, figure_update, frames=range(10000), interval=1, blit=False)
+thread1 = threading.Thread(target=iterate)
+# thread2 = threading.Thread(target=output)
+thread1.start()
+# thread2.start()
+
+ani = FuncAnimation(fig, figure_update, frames=range(10000), interval=30, blit=False)
 
 plt.show()
 
