@@ -310,7 +310,7 @@ class antAlogorithm:
             if (d<minPath):
                 minPathIndex=i
                 minPath = d
-        print("global:{},iteration:{},length:{:2f},historyBest:{:2f}".format(
+        print("global:{},iteration:{},length:{:.2f},historyBest:{:.2f}".format(
             self.globalEndCount,
             self.iterationCount,
             minPath,
@@ -515,8 +515,8 @@ class ant:
 if __name__=='__main__':
     isplot=True
     # n=antAlogorithm(antCount=100,cityCount=20,plot=isplot)
-    n=antAlogorithm(antCount=200,cityCount=35,plot=isplot)
-    # n=antAlogorithm(antCount=300,cityCount=50,plot=isplot)
+    # n=antAlogorithm(antCount=200,cityCount=35,plot=isplot)
+    n=antAlogorithm(antCount=300,cityCount=50,plot=isplot)
     # n=antAlogorithm(antCount=500,cityCount=100,plot=isplot)
 
     while True:
