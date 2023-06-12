@@ -87,7 +87,7 @@ class MotionRoadmap(object):
           theta_dir = math.atan2(sample[0, 0] - point_close[0, 0], sample[0, 1] - point_close[0, 1])
           point_new = point_close + step_size * np.mat([math.sin(theta_dir), math.cos(theta_dir)])
           # 将坐标化为整数
-          point_new = np.around(point_new)
+          point_new = np.around(point_new).astype(np.int32)
           #检测碰撞
           if not mpt.check_path(point_close, point_new, img_binary):
               num_try = num_try + 1
@@ -131,9 +131,14 @@ if __name__=="__main__":
     ## 预处理
     # 图像路径
 
-    image_path = os.path.dirname(__file__)+"/sourceMap/map_3.bmp"
+    image_path = os.path.dirname(__file__)+"\\sourceMap\\map_3.bmp"
     # 读取图像
-    img = cv2.imread(image_path)# np.ndarray BGR uint8
+    # img = cv2.imread(image_path)# np.ndarray BGR uint8
+
+    img = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), -1)
+    # imdecode读取的是rgb，如果后续需要opencv处理的话，需要转换成bgr，转换后图片颜色会变化
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
     img = cv2.resize(img,(500,500))
     mr = MotionRoadmap(img)
     #mr.rrt_planning(s=20, t=20, l=15000)

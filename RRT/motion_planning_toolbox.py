@@ -154,8 +154,10 @@ def tree_plot(map_img, rrt_tree):
     
     
     #保存到文件
-    cv2.imwrite(os.path.dirname(__file__)+"/solutionMap/solution@"+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+".bmp",map_img)
-
+    file_name="solution@{0:%Y-%m-%d-%H-%M-%S}.bmp".format(datetime.datetime.now())
+    write_path=os.path.dirname(__file__)+"\\solutionMap\\"+file_name
+    # cv2.imwrite(write_path,map_img)
+    cv2.imencode('.bmp', map_img)[1].tofile(write_path)
     #直接显示
     #cv2.imshow("地图", map_img)# 转为RGB显示
     #cv2.waitKey()

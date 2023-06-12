@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import cv2
 import math
 
-WIDTH, HEIGHT = 300, 300
+WIDTH, HEIGHT = 50, 50
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
