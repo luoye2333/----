@@ -8,6 +8,8 @@ from matplotlib.animation import FuncAnimation
 import time
 from motion_roadmap import MotionRoadmap
 import motion_planning_toolbox as mpt
+import datetime
+import os
 
 class ant:
     def __init__(self,
@@ -18,8 +20,8 @@ class ant:
                  target_y=250,
                  step_length=3,
                  step_length_min=3,
-                 sense_radius=10,
-                 random_angle_range=30,
+                 sense_radius=9,
+                 random_angle_range=5,
                  end_threshold=5,
                  map_size=[300,300],
                  obstacle_map=None,
@@ -31,6 +33,9 @@ class ant:
         self.path=np.array([[start_x,start_y]])
         self.path_length=0
 
+        self.start_x=start_x
+        self.start_y=start_y
+        self.start_angle=start_angle
         self.target=[target_x,target_y]
         self.map_size_x=map_size[0]
         self.map_size_y=map_size[1]
@@ -73,91 +78,123 @@ class ant:
             #如果周围没有信息素，就按原方向走
             max_info_density_angle=current_angle
         else:
-            # max_info_density_angle=get_max_infoDensity_angle(InfoDensityMap,
-            #                                                  round(x),
-            #                                                  round(y),
-            #                                                  radius=sense_radius)
+            max_info_density_angle=get_max_infoDensity_angle(InfoDensityMap,
+                                                             round(x),
+                                                             round(y),
+                                                             radius=sense_radius)
 
-            for ix in range(x_down,x_up):
-                for iy in range(y_down,y_up):
-                    #检测圆半径
-                    r=math.sqrt((ix-x)**2+(iy-y)**2)
-                    if r>sense_radius:continue
-                    #计算方位
-                    info_angle=math.atan2(iy-y,ix-x)*180/math.pi
-                    if info_angle<0:info_angle+=360
-                    delta_angle=info_angle-current_angle
-                    if(delta_angle>left_angle/2*3)or(delta_angle<right_angle/2*3):continue
-                    if(delta_angle>left_angle/2):
-                        left_info_density+=InfoDensityMap[ix][iy]
-                    elif(delta_angle>right_angle/2):
-                        mid_info_density+=InfoDensityMap[ix][iy]
-                    else:
-                        right_info_density+=InfoDensityMap[ix][iy]
+            # for ix in range(x_down,x_up):
+            #     for iy in range(y_down,y_up):
+            #         #检测圆半径
+            #         r=math.sqrt((ix-x)**2+(iy-y)**2)
+            #         if r>sense_radius:continue
+            #         #计算方位
+            #         info_angle=math.atan2(iy-y,ix-x)*180/math.pi
+            #         if info_angle<0:info_angle+=360
+            #         delta_angle=info_angle-current_angle
+            #         if(delta_angle>left_angle/2*3)or(delta_angle<right_angle/2*3):continue
+            #         if(delta_angle>left_angle/2):
+            #             left_info_density+=InfoDensityMap[ix][iy]
+            #         elif(delta_angle>right_angle/2):
+            #             mid_info_density+=InfoDensityMap[ix][iy]
+            #         else:
+            #             right_info_density+=InfoDensityMap[ix][iy]
             
-            tolerance=1e-5
-            if(abs(mid_info_density-left_info_density)<tolerance)and\
-            (abs(mid_info_density-right_info_density)<tolerance):
-                #如果差不多，则默认不转动
-                angle_select=1
-            else:
-                angle_select=np.argmax([left_info_density,mid_info_density,right_info_density])            
-            
-            #最大信息素方向
-            if(angle_select==0):
-                max_info_density_angle=current_angle+left_angle
-            elif(angle_select==1):
-                max_info_density_angle=current_angle
-            elif(angle_select==2):
-                max_info_density_angle=current_angle+right_angle
+            # tolerance=1e-5
+            # if(abs(mid_info_density-left_info_density)<tolerance)and\
+            # (abs(mid_info_density-right_info_density)<tolerance):
+            #     #如果差不多，则默认不转动
+            #     angle_select=1
+            # else:
+            #     #否则选择最大信息素方向
+            #     density_array=[left_info_density,mid_info_density,right_info_density]
+               
+            #     #硬最大值
+            #     # angle_select=np.argmax(judge_angle_array)   
+
+            #     #softmax + 随机概率
+            #     density_array-=np.max(density_array)#防溢出
+            #     prob_array=np.exp(density_array)/np.sum(np.exp(density_array))   
+            #     angle_select=chooseByProb([0,1,2],prob_array)  
+
+            # if(angle_select==0):
+            #     max_info_density_angle=current_angle+left_angle
+            # elif(angle_select==1):
+            #     max_info_density_angle=current_angle
+            # elif(angle_select==2):
+            #     max_info_density_angle=current_angle+right_angle   
 
             # #排除刚好沿着路径方向走的情况
-            # reference_radius=5
-            # x_down=max(math.ceil(x-reference_radius),0)
-            # x_up=min(math.floor(x+reference_radius),map_size_x)
-            # y_down=max(math.ceil(y-reference_radius),0)
-            # y_up=min(math.floor(y+reference_radius),map_size_y)
-            # reference_angle_map=angleMap[x_down:x_up,y_down:y_up]
-            # mask=reference_angle_map>0
-            # #求均值时排除差特别多的点
-            # data=reference_angle_map[mask]
-            # if not len(data)==0:
-            #     # 计算数据集平均值和标准差
-            #     data_mean = np.mean(data)
-            #     data_std = np.std(data)
-            #     # 计算每个数据点的 Z-Score
-            #     z_scores = (data - data_mean) / data_std
-            #     # 找到大于 3 或者小于 -3 的数据点
-            #     outliers = np.where(np.abs(z_scores) > 2)
-            #     # 移除离群点，重新计算平均值
-            #     data_cleaned = np.delete(data, outliers)
-            #     mean_cleaned = np.mean(data_cleaned)
-            #     reference_angle=mean_cleaned
+            reference_radius=3
+            x_down=max(math.ceil(x-reference_radius),0)
+            x_up=min(math.floor(x+reference_radius),map_size_x)
+            y_down=max(math.ceil(y-reference_radius),0)
+            y_up=min(math.floor(y+reference_radius),map_size_y)
+            reference_angle_map=angleMap[x_down:x_up+1,y_down:y_up+1]
+            mask=reference_angle_map>0
+            data=reference_angle_map[mask]
+            
+            if not len(data)==0:
+                #求均值时排除差特别多的点
+                # 计算数据集平均值和标准差
+                data_mean = np.mean(data)
+                data_std = np.std(data)
+                # 计算每个数据点的 Z-Score
+                z_scores = (data - data_mean) / data_std
+                # 找到大于 3 或者小于 -3 的数据点
+                outliers = np.where(np.abs(z_scores) > 2)
+                # 移除离群点，重新计算平均值
+                data_cleaned = np.delete(data, outliers)
+                mean_cleaned = np.mean(data_cleaned)
+                reference_angle=mean_cleaned
 
-            #     #debug:显示当前search_map
-            #     # image=cv2.resize(cv2.transpose(np.flip(reference_angle_map,1)),(280,280),cv2.INTER_BITS)
-            #     # for i in range(image.shape[1]):
-            #     #     for j in range(image.shape[0]):
-            #     #         if (i%40==0)or(j%40==0):
-            #     #             image[j, i] = np.max(image)
-            #     # cv2.imshow('123',image)
+                # #debug:显示当前search_map
+                # # image=cv2.resize(cv2.transpose(np.flip(reference_angle_map,1)),(280,280),cv2.INTER_BITS)
+                # # for i in range(image.shape[1]):
+                # #     for j in range(image.shape[0]):
+                # #         if (i%40==0)or(j%40==0):
+                # #             image[j, i] = np.max(image)
+                # # cv2.imshow('123',image)
 
-            #     tolerence_angle=30
-            #     delta=abs(max_info_density_angle-reference_angle)-180
-            #     if abs(delta)<tolerence_angle:
-            #         max_info_density_angle=max_info_density_angle-180
-            #         if max_info_density_angle<0:max_info_density_angle+=360
+                #只考虑站的位置上的参考方向
+                # reference_angle=data[0]
+                
+                tolerence_angle=30
+                delta=abs(max_info_density_angle-reference_angle)-180
+                if abs(delta)<tolerence_angle:
+                    max_info_density_angle=max_info_density_angle-180
+                    if max_info_density_angle<0:max_info_density_angle+=360
         #随机角度
         random_angle=random.random()*random_angle_range*2-random_angle_range
         #终点的方向
         endpoint_angle=math.atan2(self.target[1]-y,self.target[0]-x)*180/math.pi
 
-        #在最大信息素方向和终点方向终选一个
+        #在原来方向、最大信息素方向、终点方向中选一个
         prob=random.random()
-        if prob>0.99:
+        #终点距离和概率有关，大于临界值都设1%，小于临界值线性增大
+        target_dist=math.sqrt((self.target[1]-y)**2+(self.target[0]-x)**2)
+        prob_threshold=30
+        if target_dist>prob_threshold:
+            target_prob=0.01
+        else:
+            target_prob=1-target_dist/prob_threshold*0.99
+
+        if prob<target_prob:
             next_facing_angle=endpoint_angle
         else:
-            next_facing_angle=max_info_density_angle
+            #在当前角度和最大信息素角度中选一个
+            # prob2=random.random()
+            # if prob<0.5:
+            #     next_facing_angle=max_info_density_angle
+            # else:
+            #     next_facing_angle=current_angle
+
+            #根据最大信息素角度产生偏转
+            delta=max_info_density_angle-current_angle
+            if delta>180:delta-=360
+            if delta<-180:delta+=360
+            next_facing_angle=current_angle+delta/15
+
         next_facing_angle+=random_angle
 
         #整定到0~360度之间
@@ -181,6 +218,10 @@ class ant:
             #如果碰撞，还要更改一次方向
             next_pos_x=x+step_length*math.cos(self.facing_angle/180*math.pi)
             next_pos_y=y+step_length*math.sin(self.facing_angle/180*math.pi)
+            if(self.obstacleDetection(x=next_pos_x,y=next_pos_y)):
+                #反弹一次还是有碰撞，直接重置
+                self.reset()
+                return
 
         self.current_pos_x=next_pos_x
         self.current_pos_y=next_pos_y
@@ -220,53 +261,54 @@ class ant:
         
         #障碍检测
 
-        # #策略2：找障碍法向，沿墙壁法向翻转
-        # if self.obstacle_map[round(x)][round(y)]>0:
-        #     #先找行进方向和墙壁边线的交点
-        #     current_x=self.current_pos_x
-        #     current_y=self.current_pos_y
-        #     next_x=x
-        #     next_y=y
-        #     angle=self.facing_angle
+        #策略2：找障碍法向，沿墙壁法向翻转
+        if self.obstacle_map[round(x)][round(y)]>0:
+            #先找行进方向和墙壁边线的交点
+            current_x=self.current_pos_x
+            current_y=self.current_pos_y
+            next_x=x
+            next_y=y
+            angle=self.facing_angle
 
-        #     surface_x=x
-        #     surface_y=y
-        #     for step_length in np.arange(0,self.step_length,0.5) :
-        #         surface_x=round(current_x+step_length*math.cos(angle/180*math.pi))
-        #         surface_y=round(current_y+step_length*math.sin(angle/180*math.pi))
-        #         if self.obstacle_map[surface_x][surface_y]>0:
-        #             break
+            surface_x=x
+            surface_y=y
+            for step_length in np.arange(0,self.step_length,0.5) :
+                surface_x=round(current_x+step_length*math.cos(angle/180*math.pi))
+                surface_y=round(current_y+step_length*math.sin(angle/180*math.pi))
+                if self.obstacle_map[surface_x][surface_y]>0:
+                    break
             
-        #     calculate_radius=3
-        #     x_down=max(math.ceil(surface_x-calculate_radius),0)
-        #     x_up=min(math.floor(surface_x+calculate_radius),map_size_x)
-        #     y_down=max(math.ceil(surface_y-calculate_radius),0)
-        #     y_up=min(math.floor(surface_y+calculate_radius),map_size_y)
-        #     #计算得到交点后，截取交点附近的墙壁，作边缘检测算子
-        #     calculate_map=self.obstacle_map[x_down:x_up,y_down:y_up]
+            calculate_radius=3
+            x_down=max(math.ceil(surface_x-calculate_radius),0)
+            x_up=min(math.floor(surface_x+calculate_radius),map_size_x)
+            y_down=max(math.ceil(surface_y-calculate_radius),0)
+            y_up=min(math.floor(surface_y+calculate_radius),map_size_y)
+            #计算得到交点后，截取交点附近的墙壁，作边缘检测算子
+            calculate_map=self.obstacle_map[x_down:x_up,y_down:y_up]
 
-        #     #注意用cv2的函数前x,y转置
-        #     calculate_map=cv2.transpose(calculate_map)
+            #注意用cv2的函数前x,y转置
+            calculate_map=cv2.transpose(calculate_map)
 
-        #     # cv2.imshow("456",cv2.resize(calculate_map*255,(300,300)))
-        #     canny=cv2.Canny(calculate_map,0.5,0.5)
-        #     # cv2.imshow("123",cv2.resize(canny,(300,300)))
+            # cv2.imshow("456",cv2.resize(calculate_map*255,(300,300)))
+            canny=cv2.Canny(calculate_map,0.5,0.5)
+            # cv2.imshow("123",cv2.resize(canny,(300,300)))
 
-        #     #二值化得到边线的点
-        #     thresh_img = cv2.threshold(canny, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        #     # cv2.imshow("789",cv2.resize(thresh_img,(300,300)))
-        #     points = np.column_stack(np.where(thresh_img.transpose() > 0))
-        #     if(points.shape[0]==0):
-        #         #没检测到边线的点
-        #         return False
-        #     vx, vy, x, y = cv2.fitLine(points, cv2.DIST_L2, 0, 0.1, 0.1)
-        #     normal_angle=math.atan2(vy,vx)*180/math.pi
-        #     #沿法线方向翻转
-        #     #确认法线方向没有反
-        #     # if(abs(normal_angle-angle)<90)
-        #     self.facing_angle=2*normal_angle-self.facing_angle
-        #     self.facing_angle=math.fmod(self.facing_angle,360)
-        #     return True
+            #二值化得到边线的点
+            thresh_img = cv2.threshold(canny, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            # cv2.imshow("789",cv2.resize(thresh_img,(300,300)))
+            points = np.column_stack(np.where(thresh_img.transpose() > 0))
+            if(points.shape[0]==0):
+                #没检测到边线的点
+                return False
+            vx, vy, x, y = cv2.fitLine(points, cv2.DIST_L2, 0, 0.1, 0.1)
+            edge_angle=math.atan2(vy,vx)*180/math.pi
+            # normal_angle=edge_angle+90
+            #沿法线方向翻转
+            #确认法线方向没有反
+            # if(abs(normal_angle-angle)<90)
+            self.facing_angle=2*edge_angle-self.facing_angle
+            self.facing_angle=math.fmod(self.facing_angle,360)
+            return True
 
         #策略3：往随机方向转，直到不碰撞
         if (self.obstacle_map[round(x)][round(y)]>0):
@@ -284,6 +326,13 @@ class ant:
 
         return False
     
+    def reset(self):
+        self.current_pos_x=self.start_x
+        self.current_pos_y=self.start_y
+        self.facing_angle=self.start_angle
+        self.arrive_ending=False
+        self.path=np.array([[self.start_x,self.start_y]])
+        self.path_length=0
 
 class continous_ant_alogrithm:
     def __init__(self,
@@ -292,8 +341,10 @@ class continous_ant_alogrithm:
                  target_y,
                  start_x,
                  start_y,
-                 ant_limit=5000,
-                 history_max_length=200,
+                 ant_limit=100,
+                 history_max_length=10,
+                 update_cycle=50,
+                 RRT_initialize=False,
                  ):
         #图片坐标和逻辑坐标对应关系
         #首先opencv是先y坐标后x坐标，所以转置一下
@@ -344,9 +395,12 @@ class continous_ant_alogrithm:
         # for i in range(self.ant_limit-1):
         #     self.ant_series.append(self.new_ant())
 
-        #self.InitializePathGraph()
+        if RRT_initialize:
+            self.InitializePathGraph()
 
         self.iteration_count=0
+        self.date=datetime.datetime.now()
+        self.update_cycle=update_cycle
 
     def InitializePathGraph(self):
         #RRT
@@ -419,16 +473,28 @@ class continous_ant_alogrithm:
                         del self.history_best_ant_series[self.history_max_length]
                     self.history_update=True
 
-                print("current:{0:.2f},best:{1:.2f},iter:{2}".format(
-                    m_ant.path_length,
-                    self.history_best_ant_series[0].path_length,
-                    self.iteration_count))
+                    print("current:{0:.2f},best:{1:.2f},bad:{2:.2f},iter:{3}".format(
+                        m_ant.path_length,
+                        self.history_best_ant_series[0].path_length,
+                        self.history_best_ant_series[-1].path_length,
+                        self.iteration_count))
+
+                # print("current:{0:.2f},best:{1:.2f},bad:{2:.2f},iter:{3}".format(
+                #     m_ant.path_length,
+                #     self.history_best_ant_series[0].path_length,
+                #     self.history_best_ant_series[-1].path_length,
+                #     self.iteration_count))
 
             #路径太长，没有继续计算价值，则清除
             min_length=np.inf
+            max_length=np.inf
             if len(self.history_best_ant_series)>0:
                 min_length=self.history_best_ant_series[0].path_length
-            if m_ant.path_length>min_length*2:
+                max_length=self.history_best_ant_series[-1].path_length
+            case1=m_ant.path_length>min_length*2
+            case2=(not len(self.history_best_ant_series)<self.history_max_length)\
+                    and (m_ant.path_length>max_length)
+            if case1 or case2:
                 self.ant_series[i]=self.new_ant()
         
         #迭代完所有蚂蚁以后，更新信息素
@@ -451,23 +517,25 @@ class continous_ant_alogrithm:
         self.angleMap=np.ones(self.map_size)*(-1)#负数表示没有值
         self.angleNumberMap=np.zeros(self.map_size)
 
-        for history_rank in range(len(self.history_best_ant_series)):
+        update_len=int(self.history_max_length*0.666)
+        update_len=min(len(self.history_best_ant_series),update_len)
+        for history_rank in range(update_len):
             #对历史n个最短路径更新信息素
             m_ant=self.history_best_ant_series[history_rank]
             
-            # #信息素强度和路径长度在历史路径中的排名有关
-            # min_x,max_x=0,len(self.history_path)
-            # min_y,max_y=0,1
-            # rank=(history_rank-min_x)/(max_x-min_x)
-            # if (max_x==min_x):
-            #     func_y=max_y
-            # else:
-            #     func_x=1-rank
-            #     func_y=pow(func_x,10)*(max_y-min_y)+min_y
+            #信息素强度和路径长度在历史路径中的排名有关
+            min_x,max_x=0,len(self.history_path)
+            min_y,max_y=0,1
+            rank=(history_rank-min_x)/(max_x-min_x)
+            if (max_x==min_x):
+                func_y=max_y
+            else:
+                func_x=1-rank
+                func_y=pow(func_x,10)*(max_y-min_y)+min_y
             
             #信息素强度和路径长度倒数有关
-            func_x=1/m_ant.path_length
-            func_y=1*func_x
+            # func_x=1/m_ant.path_length
+            # func_y=1*func_x
 
             path_max_intensity=func_y*100
             
@@ -475,43 +543,46 @@ class continous_ant_alogrithm:
             #越接近终点强度越大
             for path_index in range(len(m_ant.path)-1):
                 #等差式增大
-                # min_scaler=0.5
-                # max_scaler=1
-                # scaler=path_index/len(m_ant.path)*(max_scaler-min_scaler)+min_scaler
-                scaler=1
-                #填补步长太大导致的空隙
+                min_scaler=0.5
+                max_scaler=1
+                scaler=path_index/len(m_ant.path)*(max_scaler-min_scaler)+min_scaler
+                
+                #不增大
+                # scaler=1
 
                 point1=m_ant.path[path_index]
                 point2=m_ant.path[path_index+1]
-                new_map=np.zeros(self.map_size)
-                cv2.line(img=new_map,
-                         pt1=np.flip(point1).astype(int),
-                         pt2=np.flip(point2).astype(int),
-                         color=path_max_intensity*scaler,
-                         thickness=3)
-                self.InfoDensityMap=self.InfoDensityMap+new_map
+                #cv2方式更新：适用于信息素半径大于1的情况
+                # new_map=np.zeros(self.map_size)
+                # cv2.line(img=new_map,
+                #          pt1=np.flip(point1).astype(int),
+                #          pt2=np.flip(point2).astype(int),
+                #          color=path_max_intensity*scaler,
+                #          thickness=1)
+                # self.InfoDensityMap=self.InfoDensityMap+new_map
 
                 #信息素半径为1
-                # path_angle=math.atan2(point2[1]-point1[1],point2[0]-point1[0])*180/math.pi
-                # if path_angle<0:path_angle+=360
-                # x=np.linspace(point1[0],point2[0],m_ant.step_length*3)
-                # y=np.linspace(point1[1],point2[1],m_ant.step_length*3)
-                # points=[(round(x[i]),round(y[i])) for i in range(len(x))]
-                # #去除重复
-                # seen = set()
-                # result = []
-                # for point in points:
-                #     if point not in seen:
-                #         seen.add(point)
-                #         result.append(list(point))
-                # points=np.array(result)
-                # for i in range(len(points)-1):#线段两端端点只更新一个，否则重叠后有问题
-                #     point=tuple(points[i])
-                #     self.InfoDensityMap[point]+=path_max_intensity*scaler
-                #     if self.angleMap[point]==-1:
-                #         self.angleMap[point]=0
-                #     self.angleMap[point]+=path_angle
-                #     self.angleNumberMap[point]+=1
+                path_angle=math.atan2(point2[1]-point1[1],point2[0]-point1[0])*180/math.pi
+                if path_angle<0:path_angle+=360
+                x=np.linspace(point1[0],point2[0],m_ant.step_length*3)
+                y=np.linspace(point1[1],point2[1],m_ant.step_length*3)
+                #填补步长太大导致的空隙
+                points=[(round(x[i]),round(y[i])) for i in range(len(x))]
+                #去除重复
+                seen = set()
+                result = []
+                for point in points:
+                    if point not in seen:
+                        seen.add(point)
+                        result.append(list(point))
+                points=np.array(result)
+                for i in range(len(points)-1):#线段两端端点只更新一个，否则重叠后有问题
+                    point=tuple(points[i])
+                    self.InfoDensityMap[point]+=path_max_intensity*scaler
+                    if self.angleMap[point]==-1:
+                        self.angleMap[point]=0
+                    self.angleMap[point]+=path_angle
+                    self.angleNumberMap[point]+=1
         #去除信息素浓度特别小的点
         max_info_density=np.max(self.InfoDensityMap)
         mask=self.InfoDensityMap<(max_info_density*0.01)
@@ -531,14 +602,17 @@ class continous_ant_alogrithm:
         target_color=(241,188,202,255)
         info_color=(0,0,255)
 
-        #复制原始地形
-        imageArray=np.copy(self.terrainMap)
-        imageArray=cv2.cvtColor(imageArray, cv2.COLOR_RGB2RGBA)
+        update_cycle=self.update_cycle
 
-        if not (self.iteration_count%100==0):
+        #每隔一定周期画图，其他时候返回上一刻图像
+        if not(self.iteration_count%update_cycle==0):
             print("iter:{0}".format(self.iteration_count))
             return self.im
-
+                #复制原始地形
+        
+        imageArray=np.copy(self.terrainMap)
+        imageArray=cv2.cvtColor(imageArray, cv2.COLOR_RGB2RGBA)
+        
         #如果没有信息素，只绘制蚂蚁和终点
         max_info_density=np.max(self.InfoDensityMap)
         if max_info_density==0:
@@ -599,17 +673,44 @@ class continous_ant_alogrithm:
         imageArray=cv2.transpose(imageArray)
 
         imageArray=cv2.transpose(imageArray)
+
+        # 每隔一定周期保存一次图片，但是注意这里保存的是上一周期的
+        # 因为这次的图像还没显示
+        # 前面几个周期的时候也有可能因为没有信息素跳过
+        if (self.iteration_count%update_cycle==0):
+            dirname="date@{0:%Y-%m-%d-%H-%M-%S}".format(self.date)
+            file_name="iter{0}.png".format(self.iteration_count)
+            dirfullpath=os.path.dirname(__file__)+"\\solutionMap\\"+dirname
+            if not os.path.exists(dirfullpath):
+                os.mkdir(dirfullpath)
+            write_path=os.path.dirname(__file__)+"\\solutionMap\\"+dirname+"\\"+file_name
+            plt.savefig(write_path,dpi=300)
+
+            #cv2保存有bug，不显示alpha通道
+            #image=cv2.cvtColor(cv2.flip(imageArray,0),cv2.COLOR_RGBA2BGRA)
+            #cv2.imencode('.png', image)[1].tofile(write_path)
+
         self.im.set_array(imageArray)
         return self.im
     
     def new_ant(self,
                 angle=None):
         if angle is None:
-            angle=get_max_infoDensity_angle(self.InfoDensityMap,
-                                            self.start_x,
-                                            self.start_y,
-                                            radius=10)
-
+            if random.random()<0.8:
+                angle=get_max_infoDensity_angle(self.InfoDensityMap,
+                                                self.start_x,
+                                                self.start_y,
+                                                radius=10)
+            else:
+                angle=random.random()*360
+                m_ant=ant(obstacle_map=self.ObstacleMap,
+                            start_angle=angle,
+                            start_x=self.start_x,
+                            start_y=self.start_y,
+                            target_x=self.target_x,
+                            target_y=self.target_y,
+                            map_size=self.map_size)
+                return m_ant
         m_ant=ant(obstacle_map=self.ObstacleMap,
                   start_angle=angle,
                   start_x=self.start_x,
@@ -622,19 +723,26 @@ class continous_ant_alogrithm:
 
 def get_max_infoDensity_angle(map,x,y,radius=3):
     #找点圆形范围内信息素最大的方向
-    radius=3
-    search_map=map[x-radius:x+radius+1,
-                   y-radius:y+radius+1]
+
+    map_size_x=map.shape[0]
+    map_size_y=map.shape[1]
+    x_down=max(math.ceil(x-radius),0)
+    x_up=min(math.floor(x+radius),map_size_x)
+    y_down=max(math.ceil(y-radius),0)
+    y_up=min(math.floor(y+radius),map_size_y)
+    search_map=map[x_down:x_up+1,
+                   y_down:y_up+1]
+    
     #创建一个0~360度的数组
     #对圆形范围内的所有像素点进行投票
-    gap=30#区间长度
+    gap=15#区间长度
     bar=np.zeros(int(360/gap))
     #0gap~1gap,1gap~2gap,n-1~ngap
     #共360/gap长度
     #第i对应(i~i+1)*gap范围
+
     map_size_x=search_map.shape[0]
     map_size_y=search_map.shape[1]
-    radius=map_size_x/2
     center_x=(map_size_x-1)/2
     center_y=(map_size_y-1)/2
 
@@ -642,12 +750,19 @@ def get_max_infoDensity_angle(map,x,y,radius=3):
         return random.random()*360
 
     #debug:显示当前search_map
-    # image=cv2.resize(cv2.transpose(np.flip(search_map,1)),(300,300),cv2.INTER_BITS)
-    # grid_length=int(300/radius)
+    # grid_length=40
+    # size=(2*radius+1)*grid_length
+    # debug_search_map=search_map/np.max(search_map)
+    # debug_search_map=cv2.transpose(np.flip(debug_search_map,1))
+    # image=np.zeros((size,size))
     # for i in range(image.shape[1]):
     #     for j in range(image.shape[0]):
     #         if (i%grid_length==0)or(j%grid_length==0):
-    #             image[j, i] = np.max(image)
+    #             image[j,i]=1
+    #         else:
+    #             ix=i//grid_length
+    #             iy=j//grid_length
+    #             image[j,i]=debug_search_map[iy][ix]
     # cv2.imshow('123',image)
 
     for i in range(map_size_x):
@@ -661,11 +776,32 @@ def get_max_infoDensity_angle(map,x,y,radius=3):
             index=int(angle/gap)
             bar[index]+=search_map[i,j]
     #得出最大区间
-    max_index=np.argmax(bar)
+    #硬最大值
+    #max_index=np.argmax(bar)
+
+    #softmax
+    bar-=np.max(bar)#防溢出
+    prob_array=np.exp(bar)/np.sum(np.exp(bar))   
+    max_index=chooseByProb(range(len(bar)),prob_array)  
+
     max_angle=(max_index+0.5)*gap
     #print("spawn-angle:{0:.2f}".format(max_angle))
     return max_angle
 
+def chooseByProb(array,
+                 array_prob):
+    #输入一个数组，和每项对应的概率
+    #返回选择的结果
+
+    sumProb=np.sum(array_prob)
+    #生成随机数
+    r=random.random()*sumProb
+    probCount=0
+    for pathIndex in range(len(array)):
+        probCount=probCount+array_prob[pathIndex]
+        if r<probCount:#随机数落在该概率区间内，说明随机到了这条路径
+            return array[pathIndex]
+        
 alogrithm=None
 
 def figure_update(iteration_count):
@@ -679,13 +815,17 @@ def figure_update(iteration_count):
     return alogrithm.im
 
 if __name__=='__main__':
-    terrain_image=cv2.imread('map2.png')
+    terrain_image=cv2.imread('map3.png')
     alogrithm=continous_ant_alogrithm(terrain_image=terrain_image,
                                         target_x=250,
                                         target_y=250,
                                         start_x=150,
-                                        start_y=150)
-    
+                                        start_y=150,
+                                        ant_limit=500,
+                                        history_max_length=15,
+                                        update_cycle=100,
+                                        RRT_initialize=False)
+
     # terrain_image=cv2.imread('map7-50x50.png')
     # alogrithm=continous_ant_alogrithm(terrain_image=terrain_image,
     #                              target_x=45,
