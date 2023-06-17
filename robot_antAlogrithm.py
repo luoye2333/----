@@ -408,6 +408,7 @@ class antAlogorithm:
         # self.updateInfoDensity()
 
     def updateInfoDensity(self):
+        #TODO:
         123
 
     def outputSolution(self,text=False):
