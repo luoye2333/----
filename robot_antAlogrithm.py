@@ -194,11 +194,128 @@ class ant:
 
         return False
 
-    def walk(self):
+    def judgeDirection(self,
+                       info_density_array,
+                       info_density_negative_array):
+        #TODO:逻辑需要整体更改
+        #信息素位于一个广义上的点(x,y,pitch,foot)
+        #而代表这个选择好或者坏
+        #x\y而言，可以偏转速度方向使选择靠近信息素
+        #pitch则不一定，可能连续变化pitch角度，有的可以有的不可以
+        #foot就更加缺少连续性
+
+        #逻辑可以改成随机生成一些备选方案，然后选择一个打分高的执行
+        #单独的质心坐标不不代表什么，要和pitch,foot一起考虑
+
+        #创建一个0~360度的数组
+        #对圆形范围内的所有点进行投票
+        gap=15#区间长度
+        bar_pitch=np.zeros(int(360/gap))
+        bar_CoM_angle=np.zeros(int(360/gap))
+        #0gap~1gap,1gap~2gap,n-1~ngap
+        #共360/gap长度
+        #第i对应(i~i+1)*gap范围
+
+        current_x,current_y,current_pitch=self.path[-1]
+        current_all_foot=self.foot_path[-1]
+        # density_array_concat=np.concatenate((info_density_array,info_density_negative_array))
+        if len(info_density_array)==0 and\
+            len(info_density_negative_array)==0:
+            density_array_concat=[]
+        elif len(info_density_array)==0:
+            density_array_concat=info_density_negative_array
+        elif len(info_density_negative_array)==0:
+            density_array_concat=info_density_array
+        else:
+            density_array_concat=np.concatenate((info_density_array,
+                                                info_density_negative_array))
+        if len(density_array_concat)==0:
+            return [None,None]
+        
+        for point_index in range(len(density_array_concat)):
+            point=density_array_concat[point_index]
+            [cx,cy,pitch,all_foot,density]=point
+            dy=cy-current_y
+            dx=cx-current_x
+
+            CoM_angle=math.atan2(dy,dx)*180/math.pi
+            if CoM_angle<0:CoM_angle+=360#-180~0转换到180~360
+            index_CoM_angle=int(CoM_angle/gap)
+            index_pitch_angle=int(pitch/gap)
+
+            if density<0:
+                # 如果density为负，表现为斥力
+                # 旋转180度添加吸引力，防止softmax出错
+                index_CoM_angle=index_CoM_angle+int(len(bar_pitch)/2)
+                # index_pitch_angle=index_pitch_angle+int(len(bar_pitch)/2)
+                index_CoM_angle=index_CoM_angle % len(bar_pitch)
+                # index_pitch_angle=index_pitch_angle % len(bar_pitch)
+                density=-density
+
+            #计算相关度(信息素点到当前点的广义上的距离)
+            #质心位置相关度、pitch相关度、落脚点相关度
+            dist=math.sqrt((dx**2+dy**2))
+            #dist=0,r=1
+            #dist=alpha,r=0.5
+            alpha1=1/50
+            relativity_CoM=1/(1+alpha1*dist)
+
+            pitch_delta=abs(current_pitch-pitch)
+            alpha2=1/30
+            relativity_pitch=1/(1+alpha2*pitch_delta)
+
+            foot_dist=0
+            for foot_index in range(self.leg_num):
+                current_foot=np.array(current_all_foot[foot_index])
+                foot=np.array(all_foot[foot_index])
+                foot_dist+=math.sqrt(np.sum(pow(current_foot-foot,2)))
+            alpha3=1/100
+            relativity_foot=1/(1+alpha3*foot_dist)
+
+            #指数权重,质心位置影响最大
+            weight1=1;weight2=1;weight3=0.5
+            relativity=pow(relativity_CoM,weight1)*\
+                       pow(relativity_pitch,weight2)*\
+                       pow(relativity_foot,weight3)
+            if relativity<0.1:
+                relativity=0
+            
+            bar_CoM_angle[index_CoM_angle]+=density*relativity
+            bar_pitch[index_pitch_angle]+=density*relativity
+        
+        if ((np.max(bar_CoM_angle)==0) and (np.min(bar_CoM_angle)==0))or\
+           ((np.max(bar_pitch)==0) and (np.min(bar_pitch)==0)):
+            return [None,None]
+
+        #得出最大区间
+        #硬最大值
+        #max_index=np.argmax(bar)
+
+        #softmax
+        bar_CoM_angle-=np.max(bar_CoM_angle)#防溢出
+        prob_array=np.exp(bar_CoM_angle)/np.sum(np.exp(bar_CoM_angle))   
+        max_index=chooseByProb(range(len(bar_CoM_angle)),prob_array)  
+        CoM_info_angle=(max_index+0.5)*gap
+
+        bar_pitch-=np.max(bar_pitch)#防溢出
+        prob_array=np.exp(bar_pitch)/np.sum(np.exp(bar_pitch))   
+        max_index=chooseByProb(range(len(bar_pitch)),prob_array)  
+        pitch_info_angle=(max_index+0.5)*gap
+        print("信息素pitch:{0},CoM:{1}".format(pitch_info_angle,CoM_info_angle))
+        return [pitch_info_angle,CoM_info_angle]
+
+    def walk(self,
+             info_density_array,
+             info_density_negative_array):
         #根据信息素，生成下一步
         global_count=0
+        foot_try_limit=10
+        body_try_limit=5
+
         while(True):
             global_count+=1
+            print("body-try:{0}".format(global_count))
+            time.sleep(0.1)
             #如果距离终点比较近了,就指向终点
             cx=self.path[-1][0]
             cy=self.path[-1][1]
@@ -207,29 +324,63 @@ class ant:
             target_dist=math.sqrt(dx**2+dy**2)
             goto_target=target_dist<200
 
-            #生成机身倾角
             if goto_target:
+                #朝终点走
                 delta=self.target_pitch-self.current_pitch
                 sgn=delta/abs(delta)
                 step=2.5
                 next_pitch_CoM=self.current_pitch+step*sgn
-            else:
-                next_pitch_CoM=self.current_pitch+(random.random()*5-2.5)
-            
-            #生成质心位置
-            if goto_target:
                 CoM_walk_angle=math.atan2(-dy,-dx)
+                
             else:
-                #假设只能向前走
-                angle_down=-30
-                angle_up=60
-                random_angle=random.random()*(angle_up-angle_down)+angle_down
-                CoM_walk_angle=self.current_pitch+random_angle
-                CoM_walk_angle=CoM_walk_angle/180*math.pi
+                case=2
+                if case==1:
+                    #策略1：随机走
+                    next_pitch_CoM=self.current_pitch+(random.random()*5-2.5)
+                    #假设只能向前走,-90~90
+                    angle_down=-30
+                    angle_up=60
+                    random_angle=random.random()*(angle_up-angle_down)+angle_down
+                    CoM_walk_angle=self.current_pitch+random_angle
+                    CoM_walk_angle=CoM_walk_angle/180*math.pi
+
+                if case==2:
+                    #策略2：计算信息素强度决定反向
+                    [pitch_info_angle,CoM_info_angle]=self.judgeDirection(info_density_array,
+                                                                          info_density_negative_array)
+                    if pitch_info_angle is not None:
+                        #根据最大信息素角度产生偏转
+                        delta=pitch_info_angle-self.current_pitch
+                        if delta>180:delta-=360
+                        if delta<-180:delta+=360
+                        next_pitch_CoM=self.current_pitch+delta/15
+
+                        #计算上一时刻CoM速度角度
+                        if len(self.path)<2:
+                            last_angle=0
+                        else:
+                            last_x=self.path[-2][0]
+                            last_y=self.path[-2][1]
+                            last_angle=math.atan2(cy-last_y,cx-last_x)/math.pi*180
+
+                        delta=CoM_info_angle-last_angle
+                        if delta>180:delta-=360
+                        if delta<-180:delta+=360
+                        CoM_walk_angle=last_angle+delta/15
+                        CoM_walk_angle=CoM_walk_angle/180*math.pi
+                    else:
+                        #没有信息素，则随机
+                        next_pitch_CoM=self.current_pitch+(random.random()*5-2.5)
+                        angle_down=-30
+                        angle_up=60
+                        random_angle=random.random()*(angle_up-angle_down)+angle_down
+                        CoM_walk_angle=self.current_pitch+random_angle
+                        CoM_walk_angle=CoM_walk_angle/180*math.pi
+
             step_CoM=(random.random()+1)*20
-            
             next_x_CoM=self.current_x_CoM+step_CoM*math.cos(CoM_walk_angle)
             next_y_CoM=self.current_y_CoM+step_CoM*math.sin(CoM_walk_angle)
+
 
             #生成四个落脚点
             #必须在地形上取点
@@ -251,6 +402,8 @@ class ant:
                                                 cx=next_x_CoM,
                                                 cy=next_y_CoM,
                                                 pitch=next_pitch_CoM)
+                print("leg:{0}".format(leg_index))
+                time.sleep(0.1)
                 try_count=0
                 while self.obstacleDetection(cx=next_x_CoM,
                                              cy=next_y_CoM,
@@ -267,7 +420,7 @@ class ant:
                                self.terrain_y[foot_next_index]]
 
                     try_count+=1
-                    if try_count>30:
+                    if try_count>foot_try_limit:
                         #有可能是因机身位置不好导致怎么生成都失败
                         #尝试很多次了以后应该重新生成机身
                         regenerate_flag=True
@@ -279,7 +432,7 @@ class ant:
             
             if regenerate_flag:
                 #失败，重新生成机身
-                if (global_count<10):
+                if (global_count<body_try_limit):
                     continue
                 else:
                     #走进死胡同，生成失败
@@ -415,9 +568,22 @@ class antAlogorithm:
         plt.pause(0.01)
 
         self.ant_series=[self.new_ant()]
+        del self.ant_series[0]#只是为了让编译器识别ant类型
+
         self.history_path=[]
-        self.history_best_ant_series=[]
+        self.history_best_ant_series=[self.new_ant()]
+        del self.history_best_ant_series[0]
+
+        self.history_fail_ant_series=[self.new_ant()]
+        del self.history_fail_ant_series[0]
+
+        self.history_update=False
+
         self.history_max_length=history_max_length
+
+        self.info_density_array=[]
+        self.info_density_negative_array=[]
+
 
     def InitializeTerrain(self):
         #生成地形(落脚点的可行域)，由几段直线组成
@@ -462,8 +628,12 @@ class antAlogorithm:
         #对所有蚂蚁推进时间
         for i in range(len(self.ant_series)):
             m_ant=self.ant_series[i]
-            m_ant.walk()
+            m_ant.walk(self.info_density_array,
+                       self.info_density_negative_array)
             if m_ant.failed:
+                #失败的结果也放入一个历史数组
+                self.history_fail_ant_series.append(m_ant)
+                self.history_update=True
                 #失败，重新生成一个替换
                 self.ant_series[i]=self.new_ant()
 
@@ -514,16 +684,72 @@ class antAlogorithm:
                 self.ant_series[i]=self.new_ant()
         
         #迭代完所有蚂蚁以后，更新信息素
-        # self.updateInfoDensity()
+        self.updateInfoDensity()
 
     def updateInfoDensity(self):
-        #TODO:
-        123
+
+        if not self.history_update:
+            return
+        
+        self.info_density_array=[]
+        update_len=int(self.history_max_length*0.666)
+        update_len=min(len(self.history_best_ant_series),update_len)
+        for history_rank in range(update_len):
+            #对历史n个最短路径更新信息素
+            m_ant=self.history_best_ant_series[history_rank]
+
+            #信息素强度和路径长度在历史路径中的排名有关
+            min_x,max_x=0,len(self.history_path)
+            min_y,max_y=0,1
+            rank=(history_rank-min_x)/(max_x-min_x)
+            if (max_x==min_x):
+                func_y=max_y
+            else:
+                func_x=1-rank
+                func_y=pow(func_x,10)*(max_y-min_y)+min_y
+
+            path_max_intensity=func_y*100
+            if abs(path_max_intensity)<1:continue#过滤一些强度很低的点
+
+            #保存每个路径点(cx,cy,pitch,foot),和对应的信息素强度
+            for path_index in range(len(m_ant.path)):
+                cx,cy,pitch=m_ant.path[path_index]
+                foot=m_ant.foot_path[path_index]
+
+                self.info_density_array.append([cx,cy,pitch,foot,path_max_intensity])
+        
+        #反作用信息素，对fail蚂蚁处理
+        self.info_density_negative_array=[]
+        for fail_ant_index in range(len(self.history_fail_ant_series)):
+            f_ant=self.history_fail_ant_series[fail_ant_index]
+            
+            #只考虑末端的几个点
+            for path_index in range(len(f_ant.path)):
+                cx,cy,pitch=f_ant.path[path_index]
+                foot=f_ant.foot_path[path_index]
+                
+                #越接近失败路径的末端，强度越大
+                path_rank=path_index/len(f_ant.path)
+                func_x=path_rank
+                func_y=pow(func_x,10)
+                fail_intensity=func_y*100*(-1)
+                if abs(fail_intensity)<1:continue#过滤一些强度很低的点
+                self.info_density_negative_array.append([cx,cy,pitch,foot,fail_intensity])
+
+        
+        
+
+        self.history_update=False
 
     def outputSolution(self,text=False):
         #输出
-        body_color=(255,0,0)
-        path_color=(0,0,255)
+        blue_color=(0,0,255)
+        red_color=(255,0,0)
+        body_color=red_color
+        path_color=blue_color
+
+        plot_body=True
+        plot_trajectory=True
 
         imageArray=np.copy(self.terrain_image)
         imageArray=cv2.cvtColor(imageArray, cv2.COLOR_GRAY2RGB)
@@ -540,64 +766,108 @@ class antAlogorithm:
             body_x,body_y,pitch=body_current_pos
             body1=hip[0]
             body2=hip[3]
-            cv2.line(img=imageArray,
-                     pt1=np.round(body1).astype(int),
-                     pt2=np.round(body2).astype(int),
-                     color=body_color,
-                     thickness=10,
-                     lineType=cv2.LINE_8
-                     )
-            #四个髋关节
-            for hip_point in hip:
-                cv2.circle(img=imageArray,
-                           center=np.round(hip_point).astype(int),
-                           radius=5,
-                           color=(255,255,255),
-                           thickness=cv2.FILLED)
-            #四个脚所在的点
-            for foot_point in foot_current_pos:
-                cv2.circle(img=imageArray,
-                           center=np.round(foot_point).astype(int),
-                           radius=5,
-                           color=(255,255,255),
-                           thickness=cv2.FILLED)
-            #大小腿连杆
-            for leg_index in range(4):
-                knee_point=m_ant.calculate_knee_postion(leg_index=leg_index)
-                cv2.circle(img=imageArray,
-                           center=np.round(knee_point).astype(int),
-                           radius=5,
-                           color=(255,255,255),
-                           thickness=cv2.FILLED)
+            if plot_body:
                 cv2.line(img=imageArray,
-                     pt1=np.round(knee_point).astype(int),
-                     pt2=np.round(hip[leg_index]).astype(int),
-                     color=body_color,
-                     thickness=10,
-                     lineType=cv2.LINE_8
-                     )
-                cv2.line(img=imageArray,
-                     pt1=np.round(knee_point).astype(int),
-                     pt2=np.round(foot_current_pos[leg_index]).astype(int),
-                     color=body_color,
-                     thickness=10,
-                     lineType=cv2.LINE_8
-                     )
-            #画轨迹
-            for path_index in range(len(m_ant.path)-1):
-                path_point1=m_ant.path[path_index]
-                path_point2=m_ant.path[path_index+1]
-                point1_CoM=[path_point1[0],path_point1[1]]
-                point2_CoM=[path_point2[0],path_point2[1]]
-                cv2.line(img=imageArray,
-                     pt1=np.round(point1_CoM).astype(int),
-                     pt2=np.round(point2_CoM).astype(int),
-                     color=path_color,
-                     thickness=3,
-                     lineType=cv2.LINE_8
-                     )
+                        pt1=np.round(body1).astype(int),
+                        pt2=np.round(body2).astype(int),
+                        color=body_color,
+                        thickness=10,
+                        lineType=cv2.LINE_8
+                        )
+                #四个髋关节
+                for hip_point in hip:
+                    cv2.circle(img=imageArray,
+                            center=np.round(hip_point).astype(int),
+                            radius=5,
+                            color=(255,255,255),
+                            thickness=cv2.FILLED)
+                #四个脚所在的点
+                for foot_point in foot_current_pos:
+                    cv2.circle(img=imageArray,
+                            center=np.round(foot_point).astype(int),
+                            radius=5,
+                            color=(255,255,255),
+                            thickness=cv2.FILLED)
+                #大小腿连杆
+                for leg_index in range(4):
+                    knee_point=m_ant.calculate_knee_postion(leg_index=leg_index)
+                    cv2.circle(img=imageArray,
+                            center=np.round(knee_point).astype(int),
+                            radius=5,
+                            color=(255,255,255),
+                            thickness=cv2.FILLED)
+                    cv2.line(img=imageArray,
+                        pt1=np.round(knee_point).astype(int),
+                        pt2=np.round(hip[leg_index]).astype(int),
+                        color=body_color,
+                        thickness=10,
+                        lineType=cv2.LINE_8
+                        )
+                    cv2.line(img=imageArray,
+                        pt1=np.round(knee_point).astype(int),
+                        pt2=np.round(foot_current_pos[leg_index]).astype(int),
+                        color=body_color,
+                        thickness=10,
+                        lineType=cv2.LINE_8
+                        )
+            if plot_trajectory:
+                #画轨迹
+                for path_index in range(len(m_ant.path)-1):
+                    path_point1=m_ant.path[path_index]
+                    path_point2=m_ant.path[path_index+1]
+                    point1_CoM=[path_point1[0],path_point1[1]]
+                    point2_CoM=[path_point2[0],path_point2[1]]
+                    cv2.line(img=imageArray,
+                        pt1=np.round(point1_CoM).astype(int),
+                        pt2=np.round(point2_CoM).astype(int),
+                        color=path_color,
+                        thickness=3,
+                        lineType=cv2.LINE_8
+                        )
+        
+        #画信息素
+        imageArray=cv2.cvtColor(imageArray, cv2.COLOR_RGB2RGBA)
 
+        if len(self.info_density_array)==0 and\
+            len(self.info_density_negative_array)==0:
+            density_array_concat=[]
+        elif len(self.info_density_array)==0:
+            density_array_concat=self.info_density_negative_array
+        elif len(self.info_density_negative_array)==0:
+            density_array_concat=self.info_density_array
+        else:
+            density_array_concat=np.concatenate((self.info_density_array,
+                                                self.info_density_negative_array))
 
+        if len(density_array_concat)>0:
+            #归一化
+            #point=[cx,cy,pitch,[foot],density]
+            color_info_density=[point[5-1] for point in density_array_concat]
+            color_info_density=np.array(color_info_density)
+            #正信息素用蓝色表示，反信息素用红色表示
+            mask_positive=color_info_density>0
+            mask_negative=color_info_density<0
+            max_positive_color=np.max(color_info_density)
+            max_negative_color=np.min(color_info_density)
+            color_info_density[mask_positive]=color_info_density[mask_positive]/max_positive_color
+            color_info_density[mask_negative]=color_info_density[mask_negative]/max_negative_color
+
+            # color_info_density=color_info_density*0.5+0.5 
+            color_map = np.zeros((len(density_array_concat), 4))  # 创建颜色数组
+            color_map[mask_positive,0:2+1]=blue_color  # 把前三个通道设为颜色
+            color_map[mask_negative,0:2+1]=red_color
+
+            color_map[mask_positive,3]=color_info_density[mask_positive]*255  # 将不透明度设为信息素浓度
+            color_map[mask_negative,3]=color_info_density[mask_negative]*255  # 将不透明度设为信息素浓度
+
+            for i in range(len(density_array_concat)):
+                point=density_array_concat[i]
+                cv2.circle(img=imageArray,
+                           center=(round(point[0]),round(point[1])),
+                           radius=5,
+                           color=tuple(color_map[i]),
+                           thickness=cv2.FILLED)
+        
         self.im.set_array(imageArray)
 
         return self.im
@@ -608,7 +878,20 @@ class antAlogorithm:
                   self.accuracy)
         return m_ant
     
+def chooseByProb(array,
+                 array_prob):
+    #输入一个数组，和每项对应的概率
+    #返回选择的结果
 
+    sumProb=np.sum(array_prob)
+    #生成随机数
+    r=random.random()*sumProb
+    probCount=0
+    for pathIndex in range(len(array)):
+        probCount=probCount+array_prob[pathIndex]
+        if r<probCount:#随机数落在该概率区间内，说明随机到了这条路径
+            return array[pathIndex]
+        
 
 alogrithm=None
 
