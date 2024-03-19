@@ -3,6 +3,7 @@ antAlogrithm.py\
 antAlogrithm_reconstruct.py(重构：包装成类)
 
 运行结果：video\旅行商
+![Alt text](readme2.png)
 
 ## 2.用蚁群算法解决连续空间的寻路(寻找从起点到终点的最短路径)
 continous_alog.py\
@@ -12,6 +13,7 @@ map_creator.py(生成地图)
 
 运行结果: solutionMap\
 把图片合成视频: video\旅行商
+![Alt text](readme1.png)
 
 其中一种算法是初始轨迹用RRT生成,这部分使用了知乎某个作者的源码\
 https://github.com/chenjm1109/robotics-zhihu/tree/main/src/MotionPlanning/motion_planning
