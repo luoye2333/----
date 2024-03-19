@@ -315,7 +315,7 @@ class ant:
         while(True):
             global_count+=1
             print("body-try:{0}".format(global_count))
-            time.sleep(0.1)
+            # time.sleep(0.1)
             #如果距离终点比较近了,就指向终点
             cx=self.path[-1][0]
             cy=self.path[-1][1]
@@ -403,7 +403,7 @@ class ant:
                                                 cy=next_y_CoM,
                                                 pitch=next_pitch_CoM)
                 print("leg:{0}".format(leg_index))
-                time.sleep(0.1)
+                # time.sleep(0.1)
                 try_count=0
                 while self.obstacleDetection(cx=next_x_CoM,
                                              cy=next_y_CoM,
