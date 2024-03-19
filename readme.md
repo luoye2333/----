@@ -1,3 +1,6 @@
+video available on:\
+https://www.bilibili.com/video/BV1Gx4y1U7Us/
+
 ## 1.用蚁群算法解决旅行商问题(寻找n个城市中间的最短遍历路径)
 antAlogrithm.py\
 antAlogrithm_reconstruct.py(重构：包装成类)
